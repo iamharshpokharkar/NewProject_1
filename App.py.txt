@@ -1,0 +1,84 @@
+
+
+
+//fake webcam module
+
+def list_cameras():
+    """Lists available camera devices"""
+    index = 0
+    camera_list = []
+    while True:
+        cap = cv2.VideoCapture(index)
+        if not cap.read()[0]:
+            break
+        else:
+            camera_list.append(f"Camera {index}: Available")
+        cap.release()
+        index += 1
+    return camera_list
+
+def detect_static_frame(frame):
+    """Checks if the frame has low variance, indicating a synthetic image"""
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    noise = cv2.Laplacian(gray, cv2.CV_64F).var()  # Variance of Laplacian
+    return noise < 50  # Low variance → Possibly fake
+
+def detect_fake_webcam(cap):
+    """Compares two frames to check for minimal change, indicating a looped video"""
+    _, frame1 = cap.read()
+    time.sleep(0.5)  # Small delay
+    _, frame2 = cap.read()
+    diff = np.sum(cv2.absdiff(frame1, frame2))
+    return diff < 10000  # Low difference → Possibly fake
+
+def measure_fps(cap, duration=3):
+    """Measures the FPS of the webcam to detect unrealistic speeds"""
+    start = time.time()
+    frames = 0
+
+    while time.time() - start < duration:
+        ret, _ = cap.read()
+        if not ret:
+            break
+        frames += 1
+
+    fps = frames / duration
+    return fps
+
+def detect_fake():
+    """Runs all fake webcam detection checks"""
+    cap = cv2.VideoCapture(0)
+    
+    if not cap.isOpened():
+        print("No webcam detected!")
+        return False
+
+    ret, frame = cap.read()
+    if not ret:
+        print("Error capturing frame!")
+        return False
+
+    # Check for static frames
+    if detect_static_frame(frame):
+        print("⚠️ Fake Webcam Detected: Low image variance")
+        return True
+
+    # Check for frame difference over time
+    if detect_fake_webcam(cap):
+        print("⚠️ Fake Webcam Detected: Minimal frame difference")
+        return True
+
+    # Check for unrealistic FPS
+    fps = measure_fps(cap)
+    print(f"Captured FPS: {fps}")
+    if fps > 40:
+        print("⚠️ Fake Webcam Detected: Unrealistic FPS")
+        return True
+
+    print("✅ Real Webcam Detected!")
+    cap.release()
+    return False
+
+if __name__ == "__main__":
+    print("Available Cameras:", list_cameras())
+    detect_fake()
